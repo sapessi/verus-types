@@ -24,6 +24,34 @@ Experimental repo inspired by Niko's excellent blog post: [What agents mean for 
 Each type's rustdoc explains when to use it, what it proves, and what it does
 **not** prove: `cargo doc --open`.
 
+## Why this approach
+
+Most verification approaches put the proof burden on application developers:
+- **Annotating app code with Verus or Dafny** means writing invariants and
+  loop specs for every function.
+- **Lean or TLA+** means a separate language, or a model that can drift from
+  the shipped code.
+- **Tests and runtime checks** cover only the inputs someone thought of.
+
+This crate instead uses Rust's type system to *deliver* proofs that are
+written and checked once, inside the library types, so application code
+inherits them by construction:
+
+| Rust feature | What it guarantees here |
+|---|---|
+| Phantom type parameters | units, id kinds, workflow states and day-count conventions can't be mixed up |
+| Ownership and moves | transitions consume the old state; approval and deadline tokens are unforgeable and tied to one request; transactions can't escape their scope |
+| Trait impls | declarative tables domain experts can review: `CanMoveTo` edges, `Invariant` rules, `Mask` policies |
+| Module privacy | the closed world: governed data changes only through verified methods |
+
+Most proof obligations become ordinary type errors that Rust developers
+already understand; the rest are strong `ensures` clauses the solver uses
+automatically in calling code. Proofs are erased at compile time, so
+guarantees like conservation of money, at-most-once transfers and correctly
+rounded interest cost nothing at runtime. The code stays ordinary Rust, with
+its ecosystem and toolchain, and the mutation suite (section 6) checks that
+each guarantee actually rejects the bug it claims to.
+
 ## 1. Set up
 
 You need Verus, its Rust toolchain, and the Z3 solver that ships with it.
