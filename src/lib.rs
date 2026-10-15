@@ -22,7 +22,7 @@
 //! | a request clients may retry            | [`idempotent::IdempotencyLog`]         |
 //! | a record several writers may edit      | [`versioned::Versioned`]               |
 //! | amount × fraction, rounded on purpose  | [`ratio::Ratio`], [`ratio::Rounding`]  |
-//! | "within N days" rules                  | [`deadline::Deadline`]                 |
+//! | deadlines, waiting periods, windows    | [`time_range::TimeRange`]              |
 //! | "at most X per day" limits             | [`window::WindowLimit`]                |
 //! | data that must not reach logs          | [`redacted::Redacted`]                 |
 //!
@@ -67,7 +67,6 @@
 
 pub mod bounded;
 pub mod checked;
-pub mod deadline;
 pub mod history;
 pub mod id;
 pub mod idempotent;
@@ -75,6 +74,7 @@ pub mod patterns;
 pub mod quantity;
 pub mod ratio;
 pub mod redacted;
+pub mod time_range;
 pub mod versioned;
 pub mod window;
 pub mod workflow;

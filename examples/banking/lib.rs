@@ -10,7 +10,7 @@
 //! Layer 2  business     money · ledger · audit · four_eyes
 //!              │ instantiates with units, rules, states
 //! Layer 1  library      Quantity · Id · history · Checked · workflow ·
-//!                       IdempotencyLog · WindowLimit · Ratio · Deadline · Redacted
+//!                       IdempotencyLog · WindowLimit · Ratio · TimeRange · Redacted
 //! ```
 //!
 //! | Module | Layer | Built from | What's proved |
@@ -22,7 +22,7 @@
 //! | [`customer`] | 3 | `workflow`, `Redacted` | only verified, sanctions-screened customers reach `Verified`; tax ids print as `***-**-6789` |
 //! | [`bank`] | 3 | all of the above, `IdempotencyLog`, `WindowLimit` | conservation, at-most-once transfers, holds, daily limits, approvals, freezes |
 //! | [`interest`] | 3 | `Ratio`, `Rounding`, `Bounded` | correct rounding under the account's day-count convention |
-//! | [`disputes`] | 3 | `Deadline` | a dispute case can only be opened inside the Reg E window |
+//! | [`disputes`] | 3 | `TimeRange` | a dispute case can only be opened inside the Reg E window |
 //!
 //! Verify: `cargo verus verify --example banking`.
 //! Run the scenarios: `cargo test --example banking`.

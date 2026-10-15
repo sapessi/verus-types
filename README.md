@@ -16,7 +16,7 @@ Experimental repo inspired by Niko's excellent blog post: [What agents mean for 
 | `idempotent`<br>`IdempotencyLog<R>` | Anything clients retry after a timeout: payments, transfers, order placement | **Doing the same request twice.** A retry with the same key returns the original result without acting again, and a key's result can never be overwritten. | [banking](examples/banking/bank.rs) (transfers) |
 | `versioned`<br>`Versioned<T>` | Records several users or processes edit: profiles, applications, settings | **Lost updates.** Two writers that read the same version can't both succeed; the second gets `Stale` instead of silently overwriting the first. | [versioned.rs](src/versioned.rs) |
 | `ratio`<br>`Ratio`, `Rounding` | Interest, fees, pro-rating, currency conversion | **Wrong or accidental rounding, and overflow.** Results are proved correctly rounded (down, up, or half-up) for every input, including exact halves; you choose the mode on purpose. | [banking](examples/banking/interest.rs) (interest) |
-| `deadline`<br>`Deadline`, `OnTime` | Contract and regulatory time limits: dispute windows, response deadlines, expiries | **Acting after the deadline, or checking the wrong one.** An action that requires an `OnTime` token can only run after a passing check of that specific deadline. | [banking](examples/banking/disputes.rs) (Reg E) |
+| `time_range`<br>`TimeRange`, `InRange` | Time rules from contracts and regulation: deadlines and expiries (dispute windows, offers), waiting periods ("not before 3 days after disclosure"), and windows with both ends | **Acting outside the allowed time, or checking the wrong range.** An action that requires an `InRange` token can only run after a passing check of that specific range; a failed check says whether it was too early or too late. | [banking](examples/banking/disputes.rs) (Reg E) |
 | `window`<br>`WindowLimit` | Daily and hourly limits: withdrawals, transfer caps, login attempts | **Exceeding a limit, including by splitting.** The window's total never exceeds the limit, and rejected requests don't use any of it up. | [banking](examples/banking/bank.rs) (daily limit) |
 | `redacted`<br>`Redacted<T>`, `Mask`, `Hidden` | Personal or secret data: tax ids, account numbers, dates of birth | **Leaking through logs or debug output.** It prints only what the data type's mask writes, decided once per kind of data (e.g. every `TaxId` shows `***-**-6789`). Raw `Redacted<u64>` can't be printed: say what the value is, or choose `Hidden<u64>` (`[redacted]`). Every real use is an explicit, greppable `expose()`. Hygiene, not a full information-flow proof. | [banking](examples/banking/customer.rs) (`TaxId`) |
 | `patterns::transaction`<br>`Db::transaction` | Groups of writes that must happen together: an order plus its shipment record, a transfer between two accounts | **Partial commits and leaked transactions.** On failure nothing is published; on success everything is. The transaction can't outlive its scope, so it can't be left open holding locks. | [transaction.rs](src/patterns/transaction.rs) |
@@ -40,7 +40,7 @@ inherits them by construction:
 | Rust feature | What it guarantees here |
 |---|---|
 | Phantom type parameters | units, id kinds, workflow states and day-count conventions can't be mixed up |
-| Ownership and moves | transitions consume the old state; approval and deadline tokens are unforgeable and tied to one request; transactions can't escape their scope |
+| Ownership and moves | transitions consume the old state; approval and time-range tokens are unforgeable and tied to one request; transactions can't escape their scope |
 | Trait impls | declarative tables domain experts can review: `CanMoveTo` edges, `Invariant` rules, `Mask` policies |
 | Module privacy | the closed world: governed data changes only through verified methods |
 
@@ -88,7 +88,7 @@ Last verified with Verus `0.2026.10.04.426d8b0`, Z3 4.16.0, Rust 1.98.1.
 cargo verus verify
 ```
 
-Expected last line: `verification results:: 62 verified, 0 errors`. Each
+Expected last line: `verification results:: 67 verified, 0 errors`. Each
 "verified" item is one function whose body Verus proved meets its spec
 (`requires`/`ensures`, type invariants, no overflow).
 
@@ -103,7 +103,7 @@ you can run. `banking` is a multi-module library; see below.
 | `mortgage_servicing` | `Monotonic`, `AppendOnly`, `WriteOnce` | total paid never decreases or exceeds principal, equals the payment history, and the payoff date is set once | 7 verified |
 | `mortgage_rate_lock` | `Checked` | no rate lock can break its duration and extension rules; failed extensions change nothing | 4 verified |
 | `order_workflow` | `workflow` | every order matches its state; only declared moves compile; transitions change exactly what they say; corrupt rows are rejected | 10 verified |
-| `banking` (library) | all Layer 1 types | money is conserved; transfers happen at most once per key; holds, daily limits, four-eyes approval and freezes are enforced; accounts only for KYC-verified customers; interest is correctly rounded per day-count convention; disputes only inside the Reg E window | 58 verified |
+| `banking` (library) | all Layer 1 types | money is conserved; transfers happen at most once per key; holds, daily limits, four-eyes approval and freezes are enforced; accounts only for KYC-verified customers; interest is correctly rounded per day-count convention; disputes only inside the Reg E window | 59 verified |
 
 **Verify an example** (proves it; doesn't run it):
 
@@ -133,7 +133,7 @@ inside the types. Its module docs (`examples/banking/lib.rs`) list what each
 module proves.
 
 ```sh
-cargo verus verify --example banking    # prove it (expected: 58 verified, 0 errors)
+cargo verus verify --example banking    # prove it (expected: 59 verified, 0 errors)
 cargo test --example banking            # run the 9 end-to-end scenarios
 ```
 
@@ -225,10 +225,10 @@ marked with comments in the examples, e.g. moving a shipped order back to
 scripts/mutation-test.sh
 ```
 
-It injects 29 known bugs, one at a time, into a temporary copy of the crate
-(14 in the library, 15 in the examples), and requires Verus to reject each one.
+It injects 30 known bugs, one at a time, into a temporary copy of the crate
+(15 in the library, 15 in the examples), and requires Verus to reject each one.
 A spec that still verifies after its guard is deleted isn't checking
-anything. Expected last line: `29 caught, 0 missed or skipped` (about two minutes). Add a mutant
+anything. Expected last line: `30 caught, 0 missed or skipped` (about two minutes). Add a mutant
 whenever you add a type, a guard or an example.
 
 ## Troubleshooting
