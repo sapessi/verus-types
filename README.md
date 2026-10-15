@@ -1,6 +1,6 @@
 # verus-types
 
-Inspired by Niko's excellent blog post: [What agents mean for Rust (and vice versa)](https://smallcultfollowing.com/babysteps/blog/2026/10/14/agentic-dev-and-rust/), [Verus](https://github.com/verus-lang/verus) Types is a Rust library types that make common business-logic bugs impossible to write using Verus specs that tell callers exactly what they can rely on. Code that uses these types needs fewer proofs of its own.
+Experimental repo inspired by Niko's excellent blog post: [What agents mean for Rust (and vice versa)](https://smallcultfollowing.com/babysteps/blog/2026/10/14/agentic-dev-and-rust/). [Verus](https://github.com/verus-lang/verus) Types is a Rust library types that make common business-logic bugs impossible to write using Verus specs that tell callers exactly what they can rely on. Code that uses these types needs fewer proofs of its own.
 
 | Module and types | Use it for | Rules out, and why it matters | Example |
 |---|---|---|---|
@@ -12,6 +12,13 @@ Inspired by Niko's excellent blog post: [What agents mean for Rust (and vice ver
 | `checked`<br>`Checked<T, I>` | Rules that span several fields: `start <= end`, `refunded <= charged`, lock duration vs. extensions | **Any value that breaks the rule, even briefly.** Updates are all-or-nothing, so there's no half-updated state for other code to see, and the runtime check is proved equal to the rule, so the two can't drift apart. | [mortgage_rate_lock](examples/mortgage_rate_lock.rs) (rate lock rules) |
 | `workflow`<br>`State`, `InState<D, S>`, `CanMoveTo` | Entities with a fixed lifecycle: orders, loan applications, claims, deployments, tickets | **Data that doesn't match its state, and moves outside the workflow table.** A "shipped" order without a payment can't exist, and moving a shipped order back to created doesn't compile. Corrupt rows loaded from storage are rejected instead of silently typed. | [order_workflow](examples/order_workflow.rs) |
 | `patterns::approval`<br>`Approved` (tracked token) | "Step B only after step A" rules: deploy after review, fund after disclosure, delete after backup | **Skipping the required step, or reusing another item's approval.** The token can only be created by the approval step and is tied to one specific change. It's checked entirely at compile time and costs nothing at runtime. | [approval.rs](src/patterns/approval.rs) |
+| `id`<br>`Id<Kind>` | Every identifier that travels through the code: account, customer, order and request ids | **Passing one kind of id where another is expected.** `close(customer_id)` on a function that takes an `Id<Account>` doesn't compile; with bare `u64`s it would silently act on the wrong record. | [banking](examples/banking/ledger.rs) (account ids) |
+| `idempotent`<br>`IdempotencyLog<R>` | Anything clients retry after a timeout: payments, transfers, order placement | **Doing the same request twice.** A retry with the same key returns the original result without acting again, and a key's result can never be overwritten. | [banking](examples/banking/bank.rs) (transfers) |
+| `versioned`<br>`Versioned<T>` | Records several users or processes edit: profiles, applications, settings | **Lost updates.** Two writers that read the same version can't both succeed; the second gets `Stale` instead of silently overwriting the first. | [versioned.rs](src/versioned.rs) |
+| `ratio`<br>`Ratio`, `Rounding` | Interest, fees, pro-rating, currency conversion | **Wrong or accidental rounding, and overflow.** Results are proved correctly rounded (down, up, or half-up) for every input, including exact halves; you choose the mode on purpose. | [banking](examples/banking/interest.rs) (interest) |
+| `deadline`<br>`Deadline`, `OnTime` | Contract and regulatory time limits: dispute windows, response deadlines, expiries | **Acting after the deadline, or checking the wrong one.** An action that requires an `OnTime` token can only run after a passing check of that specific deadline. | [banking](examples/banking/disputes.rs) (Reg E) |
+| `window`<br>`WindowLimit` | Daily and hourly limits: withdrawals, transfer caps, login attempts | **Exceeding a limit, including by splitting.** The window's total never exceeds the limit, and rejected requests don't use any of it up. | [banking](examples/banking/bank.rs) (daily limit) |
+| `redacted`<br>`Redacted<T>`, `Mask`, `Hidden` | Personal or secret data: tax ids, account numbers, dates of birth | **Leaking through logs or debug output.** It prints only what the data type's mask writes, decided once per kind of data (e.g. every `TaxId` shows `***-**-6789`). Raw `Redacted<u64>` can't be printed: say what the value is, or choose `Hidden<u64>` (`[redacted]`). Every real use is an explicit, greppable `expose()`. Hygiene, not a full information-flow proof. | [banking](examples/banking/customer.rs) (`TaxId`) |
 | `patterns::transaction`<br>`Db::transaction` | Groups of writes that must happen together: an order plus its shipment record, a transfer between two accounts | **Partial commits and leaked transactions.** On failure nothing is published; on success everything is. The transaction can't outlive its scope, so it can't be left open holding locks. | [transaction.rs](src/patterns/transaction.rs) |
 
 Each type's rustdoc explains when to use it, what it proves, and what it does
@@ -53,13 +60,14 @@ Last verified with Verus `0.2026.10.04.426d8b0`, Z3 4.16.0, Rust 1.98.1.
 cargo verus verify
 ```
 
-Expected last line: `verification results:: 26 verified, 0 errors`. Each
+Expected last line: `verification results:: 62 verified, 0 errors`. Each
 "verified" item is one function whose body Verus proved meets its spec
 (`requires`/`ensures`, type invariants, no overflow).
 
 ## 4. Run and verify the examples
 
-Each example is a single file in `examples/` with a `main` you can run.
+The mortgage and order examples are single files in `examples/` with a `main`
+you can run. `banking` is a multi-module library; see below.
 
 | Example | Uses | What's proved | Expected |
 |---|---|---|---|
@@ -67,6 +75,7 @@ Each example is a single file in `examples/` with a `main` you can run.
 | `mortgage_servicing` | `Monotonic`, `AppendOnly`, `WriteOnce` | total paid never decreases or exceeds principal, equals the payment history, and the payoff date is set once | 7 verified |
 | `mortgage_rate_lock` | `Checked` | no rate lock can break its duration and extension rules; failed extensions change nothing | 4 verified |
 | `order_workflow` | `workflow` | every order matches its state; only declared moves compile; transitions change exactly what they say; corrupt rows are rejected | 10 verified |
+| `banking` (library) | all Layer 1 types | money is conserved; transfers happen at most once per key; holds, daily limits, four-eyes approval and freezes are enforced; accounts only for KYC-verified customers; interest is correctly rounded per day-count convention; disputes only inside the Reg E window | 58 verified |
 
 **Verify an example** (proves it; doesn't run it):
 
@@ -79,6 +88,45 @@ cargo verus verify --example mortgage_underwriting
 ```sh
 cargo run --example mortgage_underwriting
 ```
+
+### The banking example: an application built in layers
+
+`examples/banking/` builds a small bank from the library types, to show how an
+application gets proved properties without its authors writing proofs:
+
+```text
+Layer 3  banking    bank · customer (KYC) · interest · disputes
+Layer 2  business   money · ledger · audit trail · four-eyes approval
+Layer 1  library    the types in src/ (Quantity, Id, IdempotencyLog, WindowLimit, Ratio, ...)
+```
+
+Each layer only composes the one below and states its rules; the proofs live
+inside the types. Its module docs (`examples/banking/lib.rs`) list what each
+module proves.
+
+```sh
+cargo verus verify --example banking    # prove it (expected: 58 verified, 0 errors)
+cargo test --example banking            # run the 9 end-to-end scenarios
+```
+
+The scenarios show the guarantees in action: a retried transfer moves money
+once, held funds can't be spent, a $10,000 daily limit can't be split around,
+large transfers need two different people, and interest differs correctly
+between ACT/360 and ACT/365.
+
+**The one annotation callers write.** `Ledger` and `Bank` carry a
+well-formedness predicate, `wf()`, that every method keeps. Your own functions
+that take `&mut Bank` state it in their signature:
+
+```rust
+fn payroll(bank: &mut Bank<Usd>, ...)
+    requires old(bank).wf(),
+    ensures final(bank).wf(),
+```
+
+That's the only proof-related line application code needs. (A Verus type
+invariant would hide it entirely, but Verus doesn't yet allow growing a `Vec`
+field of a struct that has one.)
 
 ### See a proof fail
 
@@ -149,10 +197,10 @@ marked with comments in the examples, e.g. moving a shipped order back to
 scripts/mutation-test.sh
 ```
 
-It injects 13 known bugs, one at a time, into a temporary copy of the crate
-(7 in the library, 6 in the examples), and requires Verus to reject each one.
+It injects 29 known bugs, one at a time, into a temporary copy of the crate
+(14 in the library, 15 in the examples), and requires Verus to reject each one.
 A spec that still verifies after its guard is deleted isn't checking
-anything. Expected last line: `13 caught, 0 missed or skipped`. Add a mutant
+anything. Expected last line: `29 caught, 0 missed or skipped` (about two minutes). Add a mutant
 whenever you add a type, a guard or an example.
 
 ## Troubleshooting

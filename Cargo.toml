@@ -24,3 +24,10 @@ verify = true
 unexpected_cfgs = { level = "warn", check-cfg = [
   'cfg(verus_only)',
 ] }
+# Layers 2 and 3 (general business + banking), built from the library types.
+# A library-style example: verify with `cargo verus verify --example banking`,
+# run its scenario tests with `cargo test --example banking`.
+[[example]]
+name = "banking"
+path = "examples/banking/lib.rs"
+crate-type = ["lib"]

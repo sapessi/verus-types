@@ -18,6 +18,13 @@
 //! | a fixed workflow                       | [`workflow`] (`InState`, `CanMoveTo`)  |
 //! | "step B requires step A happened"      | [`patterns::approval`] (tracked token) |
 //! | must commit or roll back               | [`patterns::transaction`]              |
+//! | an identifier of a specific kind       | [`id::Id`]                             |
+//! | a request clients may retry            | [`idempotent::IdempotencyLog`]         |
+//! | a record several writers may edit      | [`versioned::Versioned`]               |
+//! | amount × fraction, rounded on purpose  | [`ratio::Ratio`], [`ratio::Rounding`]  |
+//! | "within N days" rules                  | [`deadline::Deadline`]                 |
+//! | "at most X per day" limits             | [`window::WindowLimit`]                |
+//! | data that must not reach logs          | [`redacted::Redacted`]                 |
 //!
 //! ## How the docs are organized
 //!
@@ -60,7 +67,14 @@
 
 pub mod bounded;
 pub mod checked;
+pub mod deadline;
 pub mod history;
+pub mod id;
+pub mod idempotent;
 pub mod patterns;
 pub mod quantity;
+pub mod ratio;
+pub mod redacted;
+pub mod versioned;
+pub mod window;
 pub mod workflow;

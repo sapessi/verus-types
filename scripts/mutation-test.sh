@@ -31,6 +31,22 @@ MUTANTS=(
   "underwrite uses 85% LTV|examples/mortgage_underwriting.rs|s/\(a\.property_value\.get\(\) as u128\) \* 80/(a.property_value.get() as u128) * 85/|mortgage_underwriting"
   "apply_payment skips the history|examples/mortgage_servicing.rs|s/        self\.history\.push\(PaymentRec \{ day, cents \}\);\n//|mortgage_servicing"
   "extend forgets to count the extension|examples/mortgage_rate_lock.rs|s/extensions: l\.extensions \+ 1, \.\.\*l/extensions: l.extensions, ..*l/|mortgage_rate_lock"
+  "Id::same always says equal|src/id.rs|s/        self\.v == other\.v\n/        true\n/"
+  "Versioned::update skips a version|src/versioned.rs|s/self\.version = self\.version \+ 1;/self.version = self.version + 2;/"
+  "Deadline::check rejects the last moment|src/deadline.rs|s/if now <= self\.due \{/if now < self.due {/"
+  "WindowLimit forgets earlier spending|src/window.rs|s/let base = if in_window \{ self\.total \} else \{ 0 \};/let base = 0;/"
+  "IdempotencyLog::lookup misses entries|src/idempotent.rs|s/if self\.entries\[i - 1\]\.0 == key \{/if false {/"
+  "Ratio rounds exact values up|src/ratio.rs|s/Rounding::Up => d - 1,/Rounding::Up => d,/"
+  "Ratio half-up off by one|src/ratio.rs|s#Rounding::HalfUp => d / 2,#Rounding::HalfUp => d / 2 + 1,#"
+  "Ledger::transfer forgets to debit|examples/banking/ledger.rs|s/        self\.balances\.set\(f as usize, fb - amt\);\n        self\.balances\.set\(t as usize/        self.balances.set(t as usize/|banking"
+  "Bank spends held funds|examples/banking/bank.rs|s/if amt > bal - h \{/if amt > bal {/|banking"
+  "Bank skips the idempotency check|examples/banking/bank.rs|s/        if let Some\(prev\) = self\.transfers\.lookup\(key\) \{ return prev; \}\n        let _amt/        let _amt/|banking"
+  "Bank skips the daily limit|examples/banking/bank.rs|s/        if lim\.try_add\(now, amt\)\.is_err\(\) \{ return Err\(Rejection::DailyLimit\); \}\n//|banking"
+  "KYC skips sanctions screening|examples/banking/customer.rs|s/d\.kyc_verified_at\.is_some\(\) && d\.sanctions_screened\n/d.kyc_verified_at.is_some()\n/|banking"
+  "ACT/365 uses 360 days|examples/banking/interest.rs|s/0 < r <= 366 \{ 365 \}/0 < r <= 366 { 360 }/|banking"
+  "Audit accepts back-dated entries|examples/banking/audit.rs|s/        if e\.at < self\.last \{ return Err\(ClockWentBack\); \}\n//|banking"
+  "Four-eyes allows self-approval|examples/banking/four_eyes.rs|s/    if maker == checker \{ return Err\(SamePerson\); \}\n//|banking"
+  "Reg E window is 59 days|examples/banking/disputes.rs|s/pub const REG_E_WINDOW: u64 = 60 \* DAY;/pub const REG_E_WINDOW: u64 = 59 * DAY;/|banking"
 )
 
 caught=0; failed=0
